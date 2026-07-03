@@ -2,7 +2,7 @@
 
 微博超话签到 Web 管理端。项目基于现有 `WeiboComCheckin.jar` 封装网页端，支持多账号扫码登录、Cookie 保存、定时签到、全部签到、单账号日志、企业微信通知、SMTP 邮件通知和全部签到汇总邮件。
 
-> 注意：仓库不包含 `WeiboComCheckin.jar`。请自行将该 JAR 放到项目根目录后运行。
+> 注意：仓库不直接包含 `WeiboComCheckin.jar`。Windows / Linux 一键脚本会在首次运行时从作者公开地址自动下载：`https://wb.dsttl3.cn/app/download/WeiboComCheckin.jar`。如果自动下载失败，也可以手动下载后放到项目根目录。
 
 ## 功能特性
 
@@ -22,7 +22,7 @@
 
 ```text
 weibo/
-├─ WeiboComCheckin.jar          # 核心签到 JAR，需要自行放置
+├─ WeiboComCheckin.jar          # 核心签到 JAR，首次运行可自动下载
 ├─ 一键启动网页端.bat            # 推荐入口：自动安装依赖并启动
 ├─ start-linux.sh               # Linux 一键启动脚本
 ├─ 启动微博超话签到.bat          # 命令行版 JAR 启动脚本
@@ -37,21 +37,21 @@ weibo/
 
 ## Windows 一键使用
 
-1. 确认 `WeiboComCheckin.jar` 放在项目根目录。
-2. 双击根目录下的：
+1. 双击根目录下的：
 
    ```text
    一键启动网页端.bat
    ```
 
-3. 脚本会自动：
+2. 脚本会自动：
+   - 如果根目录没有 `WeiboComCheckin.jar`，自动从作者公开地址下载。
    - 检查 Node.js；没有时尝试用 `winget` 安装 Node.js LTS。
    - 检查 Java 23；没有时尝试用 `winget` 安装 Temurin 23 JDK。
    - 首次运行自动复制 `web/config.example.json` 为 `web/config.json`。
    - 首次运行自动执行 `npm install`。
    - 启动 Web 服务并打开浏览器。
 
-4. 浏览器访问：
+3. 浏览器访问：
 
    ```text
    http://localhost:3000
@@ -68,27 +68,22 @@ weibo/
    cd Weibo-Qiandao
    ```
 
-2. 把 `WeiboComCheckin.jar` 放到项目根目录：
-
-   ```text
-   Weibo-Qiandao/WeiboComCheckin.jar
-   ```
-
-3. 执行一键启动脚本：
+2. 执行一键启动脚本：
 
    ```bash
    chmod +x start-linux.sh
    ./start-linux.sh
    ```
 
-4. 脚本会自动：
+3. 脚本会自动：
+   - 如果根目录没有 `WeiboComCheckin.jar`，自动从作者公开地址下载。
    - 检查 Node.js 和 npm；缺失时尝试用系统包管理器安装。
    - 检查 Java 23；缺失时自动下载 Temurin JDK 23 到项目内 `.runtime/jdk-23`。
    - 首次运行自动复制 `web/config.example.json` 为 `web/config.json`。
    - 首次运行自动执行 `npm install`。
    - 启动 Web 服务。
 
-5. 浏览器访问：
+4. 浏览器访问：
 
    ```text
    http://服务器IP:3000
@@ -159,6 +154,22 @@ http://localhost:3000
 - `defaultSchedule`：新增账号默认签到时间。
 - `adminToken`：API 访问令牌。公网运行时建议改成强随机字符串。
 - `smtpSetupKey`：SMTP 发件配置秘钥。只有知道该秘钥的人才能保存或测试 SMTP 发件配置。
+
+## 核心 JAR 下载
+
+项目不会把 `WeiboComCheckin.jar` 上传到 GitHub，但一键脚本会自动下载到项目根目录。
+
+公开下载地址：
+
+```text
+https://wb.dsttl3.cn/app/download/WeiboComCheckin.jar
+```
+
+如果自动下载失败，可以手动下载后放到：
+
+```text
+Weibo-Qiandao/WeiboComCheckin.jar
+```
 
 ## SMTP 邮件通知
 

@@ -5,6 +5,7 @@ chcp 65001 >nul
 set "ROOT=%~dp0"
 set "WEB=%ROOT%web"
 set "JAR=%ROOT%WeiboComCheckin.jar"
+set "JAR_URL=https://wb.dsttl3.cn/app/download/WeiboComCheckin.jar"
 set "PORT=3000"
 set "URL=http://localhost:%PORT%"
 
@@ -21,12 +22,8 @@ if not exist "%WEB%\server.js" (
     exit /b 1
 )
 
-if not exist "%JAR%" (
-    echo [错误] 未找到核心文件：%JAR%
-    echo 请把 WeiboComCheckin.jar 放到本 BAT 同级目录后再运行。
-    pause
-    exit /b 1
-)
+call :ensure_jar
+if errorlevel 1 exit /b 1
 
 where winget >nul 2>nul
 if errorlevel 1 (
@@ -80,6 +77,30 @@ node server.js
 echo.
 echo [结束] 服务已停止。
 pause
+exit /b 0
+
+:ensure_jar
+if exist "%JAR%" (
+    echo [核心] 已检测到 WeiboComCheckin.jar
+    exit /b 0
+)
+
+echo [核心] 未找到 WeiboComCheckin.jar，正在从作者公开地址下载...
+echo [下载] %JAR_URL%
+powershell -NoProfile -ExecutionPolicy Bypass -Command "try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri '%JAR_URL%' -OutFile '%JAR%' -UseBasicParsing -TimeoutSec 120; exit 0 } catch { Write-Host $_.Exception.Message; exit 1 }"
+if errorlevel 1 (
+    echo [错误] 自动下载 WeiboComCheckin.jar 失败。
+    echo 请手动下载后放到本 BAT 同级目录：%JAR%
+    echo 下载地址：%JAR_URL%
+    pause
+    exit /b 1
+)
+if not exist "%JAR%" (
+    echo [错误] 下载完成后仍未找到 WeiboComCheckin.jar。
+    pause
+    exit /b 1
+)
+echo [核心] WeiboComCheckin.jar 下载完成。
 exit /b 0
 
 :ensure_node

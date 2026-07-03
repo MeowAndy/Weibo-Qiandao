@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WEB_DIR="$ROOT_DIR/web"
 RUNTIME_DIR="$ROOT_DIR/.runtime"
 JAR_FILE="$ROOT_DIR/WeiboComCheckin.jar"
+JAR_URL="https://wb.dsttl3.cn/app/download/WeiboComCheckin.jar"
 
 log() { printf '\033[1;32m[Weibo-Qiandao]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[Weibo-Qiandao]\033[0m %s\n' "$*"; }
@@ -12,10 +13,6 @@ fail() { printf '\033[1;31m[Weibo-Qiandao]\033[0m %s\n' "$*"; exit 1; }
 
 if [[ ! -f "$WEB_DIR/server.js" ]]; then
   fail "未找到 web/server.js，请在项目根目录运行本脚本。"
-fi
-
-if [[ ! -f "$JAR_FILE" ]]; then
-  fail "未找到 WeiboComCheckin.jar。请先把 WeiboComCheckin.jar 放到项目根目录：$ROOT_DIR"
 fi
 
 run_sudo() {
@@ -27,6 +24,25 @@ run_sudo() {
     fail "需要安装依赖但当前没有 sudo，请先手动安装 Node.js 18+。"
   fi
 }
+
+download_file() {
+  local url="$1" out="$2"
+  if command -v curl >/dev/null 2>&1; then
+    curl -L --fail -o "$out" "$url"
+  elif command -v wget >/dev/null 2>&1; then
+    wget -O "$out" "$url"
+  else
+    if command -v apt-get >/dev/null 2>&1; then run_sudo apt-get update; run_sudo apt-get install -y curl ca-certificates; fi
+    command -v curl >/dev/null 2>&1 || fail "缺少 curl/wget，无法自动下载文件。"
+    curl -L --fail -o "$out" "$url"
+  fi
+}
+
+if [[ ! -f "$JAR_FILE" ]]; then
+  log "未找到 WeiboComCheckin.jar，正在从作者公开地址下载..."
+  log "$JAR_URL"
+  download_file "$JAR_URL" "$JAR_FILE" || fail "自动下载 WeiboComCheckin.jar 失败，请手动下载后放到项目根目录。"
+fi
 
 install_node_with_pm() {
   if command -v apt-get >/dev/null 2>&1; then
@@ -86,16 +102,7 @@ install_temurin23() {
   rm -rf "$tmpdir" "$RUNTIME_DIR/jdk-23" "$archive"
   mkdir -p "$tmpdir"
   log "正在下载 Temurin JDK 23（$api_arch），首次运行可能较慢..."
-  if command -v curl >/dev/null 2>&1; then
-    downloader=(curl -L --fail -o "$archive")
-  elif command -v wget >/dev/null 2>&1; then
-    downloader=(wget -O "$archive")
-  else
-    if command -v apt-get >/dev/null 2>&1; then run_sudo apt-get update; run_sudo apt-get install -y curl ca-certificates tar gzip; fi
-    command -v curl >/dev/null 2>&1 || fail "缺少 curl/wget，无法自动下载 Java 23。"
-    downloader=(curl -L --fail -o "$archive")
-  fi
-  "${downloader[@]}" "https://api.adoptium.net/v3/binary/latest/23/ga/linux/${api_arch}/jdk/hotspot/normal/eclipse"
+  download_file "https://api.adoptium.net/v3/binary/latest/23/ga/linux/${api_arch}/jdk/hotspot/normal/eclipse" "$archive"
   tar -xzf "$archive" -C "$tmpdir"
   local extracted
   extracted="$(find "$tmpdir" -mindepth 1 -maxdepth 1 -type d | head -n 1)"
