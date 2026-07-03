@@ -1,0 +1,9 @@
+{
+  "port": 3000,
+  "host": "0.0.0.0",
+  "jarPath": "../WeiboComCheckin.jar",
+  "javaPath": "java",
+  "defaultSchedule": "08:30",
+  "adminToken": "change-this-token",
+  "smtpSetupKey": "change-this-smtp-key"
+}

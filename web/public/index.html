@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>微博超话签到 Web</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div>
+        <h1>微博超话签到 Web</h1>
+        <p>多账号登录、二维码扫码、自动签到、每日定时签到</p>
+      </div>
+      <button id="refreshBtn">刷新</button>
+    </header>
+
+    <section class="panel">
+      <h2>新增账号</h2>
+      <div class="form-row">
+        <input id="nameInput" placeholder="账号备注，例如：主号" />
+        <input id="timeInput" type="time" value="08:30" />
+        <button id="addBtn">添加账号</button>
+      </div>
+      <p class="hint">添加后点击“登录”，页面会显示二维码，扫码完成后会自动签到一次。</p>
+    </section>
+
+    <section class="panel">
+      <details>
+        <summary class="settings-summary">SMTP 邮件发件配置</summary>
+        <p class="hint">SMTP 是全局发件配置，需要填写设置秘钥才能保存或测试；每个账号只需要在账号展开后填写自己的收件邮箱。</p>
+        <div class="form-row settings-row">
+          <label><input id="smtpEnabled" type="checkbox" /> 启用 SMTP</label>
+          <input id="smtpSetupKey" placeholder="SMTP 设置秘钥" type="password" />
+          <input id="smtpHost" placeholder="SMTP Host，例如 smtp.qq.com" />
+          <input id="smtpPort" placeholder="端口，例如 465" type="number" />
+          <label><input id="smtpSecure" type="checkbox" checked /> SSL/TLS</label>
+          <input id="smtpUser" placeholder="SMTP 用户名 / 邮箱" />
+          <input id="smtpPass" placeholder="SMTP 密码 / 授权码" type="password" />
+          <input id="smtpFrom" placeholder="发件人，默认使用 SMTP 用户名" />
+          <input id="smtpTestTo" placeholder="测试收件邮箱" />
+          <button id="saveSmtpBtn">保存 SMTP</button>
+          <button id="testSmtpBtn">测试发件</button>
+        </div>
+        <p id="smtpStatus" class="hint"></p>
+      </details>
+    </section>
+
+    <section class="grid">
+      <div class="panel accounts-panel">
+        <h2>账号列表</h2>
+        <div id="accounts" class="accounts"></div>
+      </div>
+
+      <div class="panel qr-panel">
+        <h2>登录二维码</h2>
+        <div id="qrBox" class="qr-box empty">还没有二维码</div>
+      </div>
+    </section>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
