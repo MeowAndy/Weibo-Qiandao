@@ -1,6 +1,6 @@
 # Weibo-Qiandao
 
-微博超话签到 Web 管理端。项目基于现有 `WeiboComCheckin.jar` 封装网页端，支持多账号扫码登录、Cookie 保存、定时签到、单账号日志、企业微信通知和 SMTP 邮件通知。
+微博超话签到 Web 管理端。项目基于现有 `WeiboComCheckin.jar` 封装网页端，支持多账号扫码登录、Cookie 保存、定时签到、全部签到、单账号日志、企业微信通知、SMTP 邮件通知和全部签到汇总邮件。
 
 > 注意：仓库不包含 `WeiboComCheckin.jar`。请自行将该 JAR 放到项目根目录后运行。
 
@@ -10,12 +10,13 @@
 - 网页扫码登录：直接在网页端打开 JAR 输出的微博登录二维码链接。
 - Cookie 状态展示：显示是否已保存 Cookie、Cookie 到期时间、微博昵称。
 - 定时签到：每个账号可单独设置每天签到时间。
-- 手动签到：支持单账号立即签到。
+- 手动签到：支持单账号立即签到和全部账号依次签到。
 - 防重复账号：扫码后识别重复 Cookie 账号并提示。
 - 单账号日志：每个账号独立运行日志，支持单账号清理日志。
 - 企业微信通知：每个账号单独配置企业微信应用通知。
 - SMTP 邮件通知：全局配置发件 SMTP，每个账号只配置收件邮箱。
-- 一键启动：Windows 下双击 BAT 自动检查环境、安装依赖并启动网页端。
+- 全部签到汇总邮件：全部签到完成后，统一发送所有账号签到结果到指定邮箱。
+- 一键启动：Windows 下双击 BAT，Linux 下运行 Shell 脚本，自动检查环境、安装依赖并启动网页端。
 
 ## 目录结构
 
@@ -23,6 +24,7 @@
 weibo/
 ├─ WeiboComCheckin.jar          # 核心签到 JAR，需要自行放置
 ├─ 一键启动网页端.bat            # 推荐入口：自动安装依赖并启动
+├─ start-linux.sh               # Linux 一键启动脚本
 ├─ 启动微博超话签到.bat          # 命令行版 JAR 启动脚本
 └─ web/
    ├─ server.js                 # Web 后端
@@ -57,9 +59,70 @@ weibo/
 
 > 如果自动安装 Node.js 或 Java 后仍提示找不到命令，请关闭当前窗口后重新双击 BAT。Windows 环境变量通常需要新窗口才会刷新。
 
+## Linux 一键使用
+
+1. 克隆仓库并进入目录：
+
+   ```bash
+   git clone https://github.com/MeowAndy/Weibo-Qiandao.git
+   cd Weibo-Qiandao
+   ```
+
+2. 把 `WeiboComCheckin.jar` 放到项目根目录：
+
+   ```text
+   Weibo-Qiandao/WeiboComCheckin.jar
+   ```
+
+3. 执行一键启动脚本：
+
+   ```bash
+   chmod +x start-linux.sh
+   ./start-linux.sh
+   ```
+
+4. 脚本会自动：
+   - 检查 Node.js 和 npm；缺失时尝试用系统包管理器安装。
+   - 检查 Java 23；缺失时自动下载 Temurin JDK 23 到项目内 `.runtime/jdk-23`。
+   - 首次运行自动复制 `web/config.example.json` 为 `web/config.json`。
+   - 首次运行自动执行 `npm install`。
+   - 启动 Web 服务。
+
+5. 浏览器访问：
+
+   ```text
+   http://服务器IP:3000
+   ```
+
+> Linux 公网部署前，请务必修改 `web/config.json` 里的 `adminToken` 和 `smtpSetupKey`。
+
+### Linux 后台运行示例
+
+如果希望断开 SSH 后继续运行，可使用 `nohup`：
+
+```bash
+nohup ./start-linux.sh > weibo-web.log 2>&1 &
+```
+
+查看日志：
+
+```bash
+tail -f weibo-web.log
+```
+
 ## 手动启动
 
+Windows PowerShell：
+
 ```powershell
+cd web
+npm install
+npm start
+```
+
+Linux/macOS：
+
+```bash
 cd web
 npm install
 npm start
@@ -117,6 +180,14 @@ QQ 邮箱常用配置：
 本次签到：29个，成功：0个，失败：0个，已签到：29个。
 ```
 
+### 全部签到汇总邮箱
+
+在网页上方的 `SMTP 邮件发件配置` 中可以设置 `全部签到汇总邮箱`。
+
+- 单账号立即签到：仍按该账号自己的通知配置发送。
+- 全部签到：会依次执行所有账号签到，完成后统一发送一封汇总邮件到你设置的汇总邮箱。
+- 如果未启用汇总邮箱，日志会显示 `全部签到汇总邮箱已关闭`。
+
 ## 企业微信通知
 
 每个账号可单独配置企业微信通知：
@@ -133,10 +204,30 @@ QQ 邮箱常用配置：
 如果要在公网服务器运行：
 
 1. 修改 `web/config.json` 里的 `adminToken` 和 `smtpSetupKey`。
-2. 使用 Nginx、Caddy 或宝塔反向代理。
+2. 放行端口 `3000`，或使用 Nginx、Caddy、宝塔反向代理。
 3. 建议配置 HTTPS。
 4. 不要公开 `web/data` 目录。
-5. 不要提交 `web/config.json`、`web/data`、`web/node_modules`。
+5. 不要提交 `web/config.json`、`web/data`、`web/node_modules`、`WeiboComCheckin.jar`。
+
+Nginx 反向代理示例：
+
+```nginx
+server {
+   listen 80;
+   server_name example.com;
+
+   location / {
+      proxy_pass http://127.0.0.1:3000;
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_set_header Host $host;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Proto $scheme;
+   }
+}
+```
 
 ## 数据保存位置
 
@@ -148,5 +239,6 @@ QQ 邮箱常用配置：
 
 - 需要 Java 23 或更高版本。
 - 需要 Node.js 18 或更高版本。
+- Linux 一键脚本会优先使用系统 Java；若系统 Java 低于 23，会下载项目内独立 Java 23，不会上传到 GitHub。
 - 本项目不重写签到逻辑，只负责管理和调用 `WeiboComCheckin.jar`。
 - 请遵守微博相关规则，合理使用。

@@ -8,6 +8,8 @@ web/*.log
 WeiboComCheckin.jar
 cookies.db
 *.log
+.runtime/
+weibo-web.log
 
 # 系统文件
 .DS_Store

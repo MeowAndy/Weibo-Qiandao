@@ -29,7 +29,7 @@
     <section class="panel">
       <details>
         <summary class="settings-summary">SMTP 邮件发件配置</summary>
-        <p class="hint">SMTP 是全局发件配置，需要填写设置秘钥才能保存或测试；每个账号只需要在账号展开后填写自己的收件邮箱。</p>
+        <p class="hint">SMTP 是全局发件配置，需要填写设置秘钥才能保存或测试；每个账号只需要在账号展开后填写自己的收件邮箱。全部签到汇总邮箱单独在这里设置。</p>
         <div class="form-row settings-row">
           <label><input id="smtpEnabled" type="checkbox" /> 启用 SMTP</label>
           <input id="smtpSetupKey" placeholder="SMTP 设置秘钥" type="password" />
@@ -43,13 +43,22 @@
           <button id="saveSmtpBtn">保存 SMTP</button>
           <button id="testSmtpBtn">测试发件</button>
         </div>
+        <div class="form-row settings-row summary-email-row">
+          <label><input id="summaryEmailEnabled" type="checkbox" /> 启用全部签到汇总邮箱</label>
+          <input id="summaryEmailTo" placeholder="全部签到完成后统一发送到这个邮箱" />
+          <button id="saveSummaryEmailBtn">保存汇总邮箱</button>
+        </div>
         <p id="smtpStatus" class="hint"></p>
       </details>
     </section>
 
     <section class="grid">
       <div class="panel accounts-panel">
-        <h2>账号列表</h2>
+        <div class="panel-title-row">
+          <h2>账号列表</h2>
+          <button id="checkinAllBtn">全部签到</button>
+        </div>
+        <p id="checkinAllStatus" class="hint"></p>
         <div id="accounts" class="accounts"></div>
       </div>
 

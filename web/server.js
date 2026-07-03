@@ -25,7 +25,7 @@ smtpResolver.setServers(config.smtpDnsServers || ['223.5.5.5', '119.29.29.29', '
 
 const STORE_FILE = path.join(DATA_DIR, 'store.json');
 let store = loadStore();
-store.logs = store.logs.filter((log) => !String(log.message || '').includes('�'));
+store.logs = store.logs.filter((log) => !String(log.message || '').includes('�') && !isJarWechatNoise(log.action, log.message));
 saveStore();
 
 const app = express();
@@ -62,7 +62,7 @@ function loadStore() {
 }
 
 function defaultSettings() {
-  return { smtp: defaultSmtpConfig() };
+  return { smtp: defaultSmtpConfig(), summaryEmail: defaultSummaryEmailConfig() };
 }
 
 function defaultSmtpConfig() {
@@ -74,6 +74,10 @@ function defaultWechatConfig() {
 }
 
 function defaultEmailConfig() {
+  return { enabled: false, to: '' };
+}
+
+function defaultSummaryEmailConfig() {
   return { enabled: false, to: '' };
 }
 
@@ -167,11 +171,18 @@ function findDuplicateAccount(account) {
 
 function writeLog(accountId, action, message) {
   const text = String(message || '').trimEnd();
+  if (isJarWechatNoise(action, text)) return;
   const row = { id: store.nextLogId++, account_id: accountId || null, action, message: text, created_at: now() };
   store.logs.push(row);
   if (store.logs.length > 2000) store.logs = store.logs.slice(-2000);
   saveStore();
   io.emit('log', { accountId, action, message: text, createdAt: row.created_at });
+}
+
+function isJarWechatNoise(action, message) {
+  const text = String(message || '');
+  if (action !== 'checkin') return false;
+  return /Token获取错误：corpsecret missing|corpsecret missing|未找到token|读取错误|写入错误|token已更新|发送微信消息/.test(text);
 }
 
 function getAccountLogs(accountId, limit = 120) {
@@ -273,7 +284,7 @@ async function sendAccountNotifications(account, title, html) {
   jobs.push(
     sendWechatMessage(account, title, html)
       .then((result) => {
-        if (!result?.skipped) writeLog(account.id, 'wechat', '企业微信签到通知已发送');
+        writeLog(account.id, 'wechat', result?.skipped ? '微信通知已关闭' : '企业微信签到通知已发送');
       })
       .catch((err) => writeLog(account.id, 'wechat', err.message))
   );
@@ -284,8 +295,20 @@ async function sendAccountNotifications(account, title, html) {
         .then(() => writeLog(account.id, 'email', `邮件签到通知已发送：${email.to}`))
         .catch((err) => writeLog(account.id, 'email', err.message))
     );
+  } else {
+    writeLog(account.id, 'email', '邮箱通知已关闭');
   }
   await Promise.allSettled(jobs);
+}
+
+function publicSummaryEmailSettings() {
+  return { ...defaultSummaryEmailConfig(), ...(store.settings.summaryEmail || {}) };
+}
+
+async function sendSummaryEmail(title, html) {
+  const setting = publicSummaryEmailSettings();
+  if (!setting.enabled || !setting.to) return { skipped: true, reason: '全部签到汇总邮箱未启用' };
+  return sendSmtpMail(setting.to, title, html);
 }
 
 function getAccount(id) {
@@ -358,9 +381,23 @@ function runJar(account, action, onQr) {
     let output = '';
     let qrEmitted = false;
     let successDetected = false;
+    let checkinSummaryDetected = false;
+    let jarWechatSkipped = false;
 
     const handle = async (buf) => {
-      const text = decodeOutput(buf);
+      let text = decodeOutput(buf);
+      if (jarWechatSkipped && action === 'checkin') return;
+      if (action === 'checkin' && /本次签到[:：]/.test(text)) checkinSummaryDetected = true;
+      if (action === 'checkin' && /发送微信消息/.test(text)) {
+        jarWechatSkipped = true;
+        text = text.replace(/发送微信消息[\s\S]*/m, '已拦截 JAR 内置企业微信通知，改由网页端通知设置控制');
+        output += text;
+        writeLog(account.id, action, text);
+        try { cp.kill('SIGKILL'); } catch {
+          try { cp.kill('SIGTERM'); } catch {}
+        }
+        return;
+      }
       output += text;
       writeLog(account.id, action, text);
       if (action === 'login' && !successDetected && isLoginSuccessText(text)) {
@@ -397,12 +434,17 @@ function runJar(account, action, onQr) {
     cp.on('close', (code) => {
       if (activeRuns.get(key) === cp) activeRuns.delete(key);
       writeLog(account.id, action, `进程结束，退出码：${code}`);
-      resolve({ code: successDetected && action === 'login' ? 0 : code, output, successDetected });
+      const normalizedCode =
+        (successDetected && action === 'login') ||
+        (jarWechatSkipped && action === 'checkin' && checkinSummaryDetected)
+          ? 0
+          : code;
+      resolve({ code: normalizedCode, output, successDetected });
     });
   });
 }
 
-async function checkinAccount(accountId) {
+async function checkinAccount(accountId, options = {}) {
   const account = getAccount(accountId);
   if (!account) throw new Error('账号不存在');
   const result = await runJar(account, 'checkin');
@@ -411,12 +453,48 @@ async function checkinAccount(accountId) {
   refreshAccountRuntimeInfo(account);
   saveStore();
   io.emit('accountUpdated', publicAccount(account));
-  if (result.code === 0) {
+  if (result.code === 0 && !options.suppressNotifications) {
     const summary = extractCheckinSummary(result.output);
     const detailHtml = summary ? `<br><br><b>签到结果：</b><pre style="white-space:pre-wrap;line-height:1.6">${escapeHtml(summary)}</pre>` : '';
     sendAccountNotifications(account, '微博超话签到成功', `账号：${escapeHtml(account.name)}<br>时间：${new Date().toLocaleString('zh-CN')}<br>状态：签到完成${detailHtml}`);
   }
   return result;
+}
+
+async function checkinAllAccounts() {
+  const targets = [...store.accounts].sort((a, b) => Number(a.id) - Number(b.id));
+  const rows = [];
+  for (const account of targets) {
+    writeLog(account.id, 'checkin-all', '全部签到任务开始处理该账号');
+    try {
+      const result = await checkinAccount(account.id, { suppressNotifications: true });
+      const summary = extractCheckinSummary(result.output);
+      rows.push({ account, ok: result.code === 0, status: account.last_status || (result.code === 0 ? '签到完成' : `签到失败：${result.code}`), summary });
+    } catch (err) {
+      account.last_checkin_at = now();
+      account.last_status = `签到失败：${err.message}`;
+      saveStore();
+      io.emit('accountUpdated', publicAccount(account));
+      writeLog(account.id, 'checkin-all', err.message);
+      rows.push({ account, ok: false, status: account.last_status, summary: err.message });
+    }
+  }
+  const okCount = rows.filter((row) => row.ok).length;
+  const failCount = rows.length - okCount;
+  const html = `全部签到完成<br>时间：${new Date().toLocaleString('zh-CN')}<br>账号数：${rows.length}，成功：${okCount}，失败：${failCount}<br><br>` + rows.map((row) => (
+    `<b>${escapeHtml(row.account.name)}（ID ${row.account.id}）</b><br>状态：${escapeHtml(row.status)}${row.summary ? `<pre style="white-space:pre-wrap;line-height:1.6">${escapeHtml(row.summary)}</pre>` : '<br>'}`
+  )).join('<hr>');
+  try {
+    const mailResult = await sendSummaryEmail('微博超话全部签到汇总', html);
+    if (mailResult?.skipped) {
+      for (const row of rows) writeLog(row.account.id, 'summary-email', '全部签到汇总邮箱已关闭');
+    } else {
+      for (const row of rows) writeLog(row.account.id, 'summary-email', `全部签到汇总邮件已发送：${publicSummaryEmailSettings().to}`);
+    }
+  } catch (err) {
+    for (const row of rows) writeLog(row.account.id, 'summary-email', `全部签到汇总邮件发送失败：${err.message}`);
+  }
+  return { total: rows.length, success: okCount, failed: failCount };
 }
 
 let scheduledJobs = new Map();
@@ -452,6 +530,19 @@ app.get('/api/accounts', (req, res) => {
 
 app.get('/api/settings/smtp', (req, res) => {
   res.json(publicSmtpSettings());
+});
+
+app.get('/api/settings/summary-email', (req, res) => {
+  res.json(publicSummaryEmailSettings());
+});
+
+app.post('/api/settings/summary-email', (req, res) => {
+  store.settings.summaryEmail = {
+    enabled: !!req.body.enabled,
+    to: req.body.to || ''
+  };
+  saveStore();
+  res.json(publicSummaryEmailSettings());
 });
 
 app.post('/api/settings/smtp', (req, res) => {
@@ -620,6 +711,11 @@ app.post('/api/accounts/:id/checkin', async (req, res) => {
   if (!account) return res.status(404).json({ error: '账号不存在' });
   res.json({ ok: true, message: '签到已启动' });
   checkinAccount(account.id).catch((err) => writeLog(account.id, 'checkin', err.message));
+});
+
+app.post('/api/accounts/checkin-all', async (req, res) => {
+  res.json({ ok: true, message: '全部签到已启动' });
+  checkinAllAccounts().catch((err) => writeLog(null, 'checkin-all', err.message));
 });
 
 app.get('/api/logs', (req, res) => {

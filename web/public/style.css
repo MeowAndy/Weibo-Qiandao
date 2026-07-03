@@ -102,6 +102,24 @@ button.ghost:hover { background: #e0e7ff; }
   gap: 6px;
   color: var(--muted);
 }
+.summary-email-row {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.summary-email-row input:not([type="checkbox"]) {
+  min-width: 260px;
+  flex: 1;
+}
+
+.panel-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.panel-title-row h2 { margin: 0; }
 
 .accounts {
   display: flex;

@@ -152,6 +152,9 @@ async function loadSmtpSettings() {
   $('smtpUser').value = s.user || '';
   $('smtpPass').value = s.pass || '';
   $('smtpFrom').value = s.from || '';
+  const summaryEmail = await api('/api/settings/summary-email');
+  $('summaryEmailEnabled').checked = !!summaryEmail.enabled;
+  $('summaryEmailTo').value = summaryEmail.to || '';
 }
 
 async function load() {
@@ -169,6 +172,13 @@ $('addBtn').onclick = async () => {
 };
 
 $('refreshBtn').onclick = load;
+
+$('checkinAllBtn').onclick = async () => {
+  if (!accounts.length) return;
+  if (!confirm('确认对所有账号依次执行立即签到？')) return;
+  $('checkinAllStatus').textContent = '全部签到已启动，会按账号依次执行；完成后会按设置发送汇总邮件。';
+  await api('/api/accounts/checkin-all', { method: 'POST' });
+};
 
 $('saveSmtpBtn').onclick = async () => {
   try {
@@ -201,6 +211,21 @@ $('testSmtpBtn').onclick = async () => {
     $('smtpStatus').textContent = 'SMTP 测试邮件已发送';
   } catch (err) {
     $('smtpStatus').textContent = `测试失败：${err.message}`;
+  }
+};
+
+$('saveSummaryEmailBtn').onclick = async () => {
+  try {
+    await api('/api/settings/summary-email', {
+      method: 'POST',
+      body: JSON.stringify({
+        enabled: $('summaryEmailEnabled').checked,
+        to: $('summaryEmailTo').value.trim()
+      })
+    });
+    $('smtpStatus').textContent = '全部签到汇总邮箱已保存';
+  } catch (err) {
+    $('smtpStatus').textContent = `保存失败：${err.message}`;
   }
 };
 
