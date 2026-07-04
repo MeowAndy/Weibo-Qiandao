@@ -368,6 +368,14 @@ function extractCheckinSummary(output) {
   return lines.join('\n');
 }
 
+function isCookieExpiredFailure(account, result) {
+  const output = String(result?.output || '');
+  const status = String(account?.last_status || '');
+  return !account?.cookie_file_exists ||
+    /cookie|登录|登陆|二维码|扫码|过期|失效|未登录|请先登录|请登录/i.test(output) ||
+    /Cookie|登录|登陆|过期|失效|未登录|请先登录|请登录/i.test(status);
+}
+
 function runJar(account, action, onQr) {
   return new Promise((resolve) => {
     const key = runKey(account, action);
@@ -451,12 +459,18 @@ async function checkinAccount(accountId, options = {}) {
   account.last_checkin_at = now();
   account.last_status = result.code === 0 ? '签到完成' : `签到失败：${result.code}`;
   refreshAccountRuntimeInfo(account);
+  const cookieExpiredFailure = result.code !== 0 && isCookieExpiredFailure(account, result);
+  if (cookieExpiredFailure) account.last_status = '签到失败：Cookie 可能已过期，请刷新 Cookie / 重新登录';
   saveStore();
   io.emit('accountUpdated', publicAccount(account));
-  if (result.code === 0 && !options.suppressNotifications) {
+  if (!options.suppressNotifications) {
     const summary = extractCheckinSummary(result.output);
-    const detailHtml = summary ? `<br><br><b>签到结果：</b><pre style="white-space:pre-wrap;line-height:1.6">${escapeHtml(summary)}</pre>` : '';
-    sendAccountNotifications(account, '微博超话签到成功', `账号：${escapeHtml(account.name)}<br>时间：${new Date().toLocaleString('zh-CN')}<br>状态：签到完成${detailHtml}`);
+    const detail = summary || (result.code === 0 ? '' : String(result.output || '').slice(-1200));
+    const detailHtml = detail ? `<br><br><b>签到结果：</b><pre style="white-space:pre-wrap;line-height:1.6">${escapeHtml(detail)}</pre>` : '';
+    const ok = result.code === 0;
+    const title = ok ? '微博超话签到成功' : (cookieExpiredFailure ? '微博超话签到失败：Cookie 可能已过期' : '微博超话签到失败');
+    const statusText = ok ? '签到完成' : account.last_status;
+    sendAccountNotifications(account, title, `账号：${escapeHtml(account.name)}<br>时间：${new Date().toLocaleString('zh-CN')}<br>状态：${escapeHtml(statusText)}${detailHtml}`);
   }
   return result;
 }
