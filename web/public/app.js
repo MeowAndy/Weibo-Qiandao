@@ -59,11 +59,9 @@ function updateAccountLogBox(accountId) {
   const account = accounts.find((item) => String(item.id) === String(accountId));
   const box = document.querySelector(`[data-log-box="${accountId}"]`);
   if (!account || !box) return;
-  const pre = box.querySelector('pre');
-  const shouldStick = !pre || pre.scrollHeight - pre.scrollTop - pre.clientHeight < 40;
   box.innerHTML = `<div class="account-log-head"><h3>该账号运行日志</h3><button class="ghost small" data-clear-logs="${accountId}">清理日志</button></div>${accountLogsHtml(account)}`;
   const nextPre = box.querySelector('pre');
-  if (nextPre && shouldStick) nextPre.scrollTop = nextPre.scrollHeight;
+  if (nextPre) nextPre.scrollTop = nextPre.scrollHeight;
 }
 
 function appendAccountLog(accountId, row) {
@@ -71,9 +69,8 @@ function appendAccountLog(accountId, row) {
   if (!box) return;
   const pre = box.querySelector('pre');
   if (!pre || pre.textContent === '暂无该账号运行日志') return updateAccountLogBox(accountId);
-  const shouldStick = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 40;
   pre.textContent += `\n${logLine({ action: row.action, message: row.message, created_at: row.createdAt })}`;
-  if (shouldStick) pre.scrollTop = pre.scrollHeight;
+  pre.scrollTop = pre.scrollHeight;
 }
 
 function renderAccounts() {
@@ -335,10 +332,10 @@ $('accounts').addEventListener('blur', async (e) => {
 socket.on('qr', (data) => {
   $('qrBox').className = 'qr-box';
   $('qrBox').innerHTML = `
-    <iframe class="qr-frame" src="${data.url}" title="微博登录二维码"></iframe>
-    <p>账号 ID：${data.accountId}</p>
-    <a href="${data.url}" target="_blank" rel="noreferrer">打开二维码链接</a>
-    <p class="hint">这里直接打开 JAR 输出的登录二维码链接。请用微博扫码，扫码完成后会刷新该账号 Cookie；需要签到请再点“立即签到”。</p>
+    <img class="qr-frame" src="${data.url}" alt="微博登录二维码" />
+    <p class="qr-account-id">账号 ID：${data.accountId}</p>
+    <a class="qr-open-link" href="${data.url}" target="_blank" rel="noreferrer">打开二维码链接</a>
+    <p class="qr-hint">扫码完成后会自动刷新该账号 Cookie，需要签到请点"立即签到"。</p>
   `;
 });
 
