@@ -537,13 +537,21 @@ function reloadSchedules() {
     const [hour, minute] = String(account.schedule_time || config.defaultSchedule || '08:30').split(':').map(Number);
     if (!Number.isInteger(hour) || !Number.isInteger(minute)) continue;
 
-    // 追赶检查：如果今天的定时时间已过且该账号今天尚未签到，自动补签
+    // 追赶：只用于服务器启动时错过定时的情况
     const scheduleToday = new Date(nowDate.getFullYear(), nowDate.getMonth(), nowDate.getDate(), hour, minute, 0);
     if (nowDate > scheduleToday) {
       const lastCheckinDate = account.last_checkin_at ? new Date(account.last_checkin_at).toISOString().slice(0, 10) : null;
       if (lastCheckinDate !== today && !todayTriggered.has(account.id)) {
         todayTriggered.add(account.id);
         setTimeout(() => {
+          // 重新读取账号最新状态，防止在 setTimeout 等待期间已经被手动签到
+          const currentAccount = getAccount(account.id);
+          if (!currentAccount) return;
+          const currentLastDate = currentAccount.last_checkin_at ? new Date(currentAccount.last_checkin_at).toISOString().slice(0, 10) : null;
+          if (currentLastDate === today) {
+            writeLog(account.id, 'schedule', `追赶跳过：已在 ${currentAccount.last_checkin_at} 签到过`);
+            return;
+          }
           writeLog(account.id, 'schedule', `启动追赶：错过定时 ${account.schedule_time}，立即签到`);
           enqueueCheckin(() => checkinAccount(account.id).catch((err) => writeLog(account.id, 'checkin', err.message)));
         }, 3000);
@@ -775,12 +783,12 @@ app.post('/api/accounts/:id/checkin', async (req, res) => {
   const account = getAccount(req.params.id);
   if (!account) return res.status(404).json({ error: '账号不存在' });
   res.json({ ok: true, message: '签到已启动' });
-  checkinAccount(account.id).catch((err) => writeLog(account.id, 'checkin', err.message));
+  enqueueCheckin(() => checkinAccount(account.id).catch((err) => writeLog(account.id, 'checkin', err.message)));
 });
 
 app.post('/api/accounts/checkin-all', async (req, res) => {
   res.json({ ok: true, message: '全部签到已启动' });
-  checkinAllAccounts().catch((err) => writeLog(null, 'checkin-all', err.message));
+  enqueueCheckin(() => checkinAllAccounts().catch((err) => writeLog(null, 'checkin-all', err.message)));
 });
 
 app.get('/api/logs', (req, res) => {
