@@ -7,7 +7,6 @@ const dns = require('dns').promises;
 const nodemailer = require('nodemailer');
 const express = require('express');
 const cors = require('cors');
-const cron = require('node-cron');
 const http = require('http');
 const { Server } = require('socket.io');
 
@@ -511,14 +510,25 @@ async function checkinAllAccounts() {
   return { total: rows.length, success: okCount, failed: failCount };
 }
 
-let scheduledJobs = new Map();
-let catchUpTimers = [];
-function reloadSchedules() {
-  for (const job of scheduledJobs.values()) job.stop();
-  scheduledJobs.clear();
-  for (const timer of catchUpTimers) clearTimeout(timer);
-  catchUpTimers = [];
+// 签到串行队列：同一时间只执行一个签到，防止 CPU 过载
+let checkinQueue = Promise.resolve();
+function enqueueCheckin(fn) {
+  checkinQueue = checkinQueue.then(() => fn(), () => fn());
+  return checkinQueue;
+}
 
+let scheduleInterval = null;
+let todayTriggered = new Set();
+let lastTriggerDate = '';
+function resetTodayTriggered() {
+  const today = new Date().toISOString().slice(0, 10);
+  if (today !== lastTriggerDate) {
+    todayTriggered.clear();
+    lastTriggerDate = today;
+  }
+}
+
+function reloadSchedules() {
   const accounts = store.accounts.filter((account) => account.enabled);
   const nowDate = new Date();
   const today = nowDate.toISOString().slice(0, 10);
@@ -526,26 +536,48 @@ function reloadSchedules() {
   for (const account of accounts) {
     const [hour, minute] = String(account.schedule_time || config.defaultSchedule || '08:30').split(':').map(Number);
     if (!Number.isInteger(hour) || !Number.isInteger(minute)) continue;
-    const expr = `${minute} ${hour} * * *`;
-    const job = cron.schedule(expr, () => {
-      writeLog(account.id, 'schedule', `定时任务触发：${account.schedule_time}`);
-      checkinAccount(account.id).catch((err) => writeLog(account.id, 'checkin', err.message));
-    });
-    scheduledJobs.set(account.id, job);
 
     // 追赶检查：如果今天的定时时间已过且该账号今天尚未签到，自动补签
     const scheduleToday = new Date(nowDate.getFullYear(), nowDate.getMonth(), nowDate.getDate(), hour, minute, 0);
     if (nowDate > scheduleToday) {
       const lastCheckinDate = account.last_checkin_at ? new Date(account.last_checkin_at).toISOString().slice(0, 10) : null;
-      if (lastCheckinDate !== today) {
-        const timer = setTimeout(() => {
+      if (lastCheckinDate !== today && !todayTriggered.has(account.id)) {
+        todayTriggered.add(account.id);
+        setTimeout(() => {
           writeLog(account.id, 'schedule', `启动追赶：错过定时 ${account.schedule_time}，立即签到`);
-          checkinAccount(account.id).catch((err) => writeLog(account.id, 'checkin', err.message));
-        }, 5000);
-        catchUpTimers.push(timer);
+          enqueueCheckin(() => checkinAccount(account.id).catch((err) => writeLog(account.id, 'checkin', err.message)));
+        }, 3000);
       }
     }
   }
+}
+
+// 每 15 秒轮询一次，检查是否有到点的定时签到
+function startScheduler() {
+  if (scheduleInterval) clearInterval(scheduleInterval);
+  scheduleInterval = setInterval(() => {
+    resetTodayTriggered();
+    const now = new Date();
+    const today = now.toISOString().slice(0, 10);
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+    const accounts = store.accounts.filter((account) => account.enabled);
+    for (const account of accounts) {
+      const [hour, minute] = String(account.schedule_time || config.defaultSchedule || '08:30').split(':').map(Number);
+      if (!Number.isInteger(hour) || !Number.isInteger(minute)) continue;
+
+      const scheduleMinutes = hour * 60 + minute;
+      // 在当前分钟附近触发（2 分钟窗口内），且该账号今天尚未签到
+      if (currentMinutes >= scheduleMinutes && currentMinutes < scheduleMinutes + 2) {
+        const lastCheckinDate = account.last_checkin_at ? new Date(account.last_checkin_at).toISOString().slice(0, 10) : null;
+        if (lastCheckinDate !== today && !todayTriggered.has(account.id)) {
+          todayTriggered.add(account.id);
+          writeLog(account.id, 'schedule', `定时任务触发：${account.schedule_time}`);
+          enqueueCheckin(() => checkinAccount(account.id).catch((err) => writeLog(account.id, 'checkin', err.message)));
+        }
+      }
+    }
+  }, 15000);
 }
 
 function requireToken(req, res, next) {
@@ -756,6 +788,7 @@ app.get('/api/logs', (req, res) => {
 });
 
 reloadSchedules();
+startScheduler();
 server.listen(config.port || 3000, config.host || '0.0.0.0', () => {
   console.log(`WeiboComCheckin Web running at http://localhost:${config.port || 3000}`);
 });
