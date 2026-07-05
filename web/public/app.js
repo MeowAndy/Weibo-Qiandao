@@ -170,6 +170,24 @@ $('addBtn').onclick = async () => {
 
 $('refreshBtn').onclick = load;
 
+$('updateBtn').onclick = async () => {
+  if (!confirm('确认从 GitHub 拉取最新代码并重启服务？')) return;
+  const btn = $('updateBtn');
+  btn.disabled = true;
+  btn.textContent = '正在拉取更新...';
+  try {
+    await api('/api/update', { method: 'POST' });
+    // API 返回成功表示 git pull 已执行，等待服务重启
+    btn.textContent = '更新完成，正在重启...';
+    // 等待服务重启后自动刷新页面
+    setTimeout(() => { location.reload(); }, 5000);
+  } catch (err) {
+    // 服务重启会导致 fetch 断开，这是预期的
+    btn.textContent = '更新完成，正在重启...';
+    setTimeout(() => { location.reload(); }, 5000);
+  }
+};
+
 $('checkinAllBtn').onclick = async () => {
   if (!accounts.length) return;
   if (!confirm('确认对所有账号依次执行立即签到？')) return;
@@ -351,6 +369,17 @@ socket.on('accountLogsCleared', ({ accountId }) => {
   const account = accounts.find((item) => String(item.id) === String(accountId));
   if (account) account.logs = [];
   updateAccountLogBox(accountId);
+});
+
+socket.on('updateProgress', (data) => {
+  const btn = $('updateBtn');
+  if (!btn) return;
+  btn.textContent = data.message;
+  btn.disabled = true;
+  if (data.stage === 'error') {
+    btn.disabled = false;
+    btn.textContent = '更新失败，重试';
+  }
 });
 
 load().catch((err) => {

@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { spawn } = require('child_process');
+const { spawn, execSync } = require('child_process');
 const { TextDecoder } = require('util');
 const https = require('https');
 const dns = require('dns').promises;
@@ -785,6 +785,38 @@ app.post('/api/accounts/checkin-all', async (req, res) => {
 
 app.get('/api/logs', (req, res) => {
   res.json(store.logs.slice(-300));
+});
+
+// 更新脚本：git pull + 自重启
+const PROJECT_ROOT = path.resolve(ROOT, '..');
+app.post('/api/update', async (req, res) => {
+  try {
+    res.json({ ok: true, message: '正在拉取更新...' });
+
+    const output = execSync('git pull origin main 2>&1', { cwd: PROJECT_ROOT, encoding: 'utf8', timeout: 60000 });
+    writeLog(null, 'update', `Git pull 结果：\n${output.trim()}`);
+
+    // 发送更新完成事件
+    io.emit('updateProgress', { stage: 'pull', message: '代码已更新，正在重启服务...' });
+
+    // 延迟一下让客户端收到消息，然后自重启
+    setTimeout(() => {
+      // 启动新进程
+      const child = spawn(process.argv[0], process.argv.slice(1), {
+        cwd: process.cwd(),
+        stdio: 'inherit',
+        detached: true,
+        windowsHide: false,
+        env: { ...process.env }
+      });
+      child.unref();
+      // 退出当前进程
+      process.exit(0);
+    }, 2000);
+  } catch (err) {
+    writeLog(null, 'update', `更新失败：${err.message}`);
+    io.emit('updateProgress', { stage: 'error', message: `更新失败：${err.message}` });
+  }
 });
 
 reloadSchedules();

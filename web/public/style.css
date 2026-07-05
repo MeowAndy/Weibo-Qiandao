@@ -944,6 +944,29 @@ input[type="checkbox"] {
   box-shadow: none;
 }
 
+/* ---- Update Button ---- */
+#updateBtn {
+  background: rgba(52, 199, 89, 0.12);
+  color: var(--green);
+  font-weight: 500;
+  padding: 10px 20px;
+  backdrop-filter: blur(4px);
+  transition: all 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+#updateBtn:hover:not(:disabled) {
+  background: rgba(52, 199, 89, 0.22);
+  box-shadow: 0 4px 16px rgba(52, 199, 89, 0.30);
+  transform: translateY(-1px);
+}
+
+#updateBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background: rgba(128, 128, 128, 0.12);
+  color: var(--text-tertiary);
+}
+
 /* ---- Checkin All Button ---- */
 #checkinAllBtn {
   background: linear-gradient(135deg, var(--green), #28a745);
