@@ -481,7 +481,7 @@ async function checkinAllAccounts() {
   for (const account of targets) {
     writeLog(account.id, 'checkin-all', '全部签到任务开始处理该账号');
     try {
-      const result = await checkinAccount(account.id, { suppressNotifications: true });
+      const result = await checkinAccount(account.id);
       const summary = extractCheckinSummary(result.output);
       rows.push({ account, ok: result.code === 0, status: account.last_status || (result.code === 0 ? '签到完成' : `签到失败：${result.code}`), summary });
     } catch (err) {
@@ -512,11 +512,17 @@ async function checkinAllAccounts() {
 }
 
 let scheduledJobs = new Map();
+let catchUpTimers = [];
 function reloadSchedules() {
   for (const job of scheduledJobs.values()) job.stop();
   scheduledJobs.clear();
+  for (const timer of catchUpTimers) clearTimeout(timer);
+  catchUpTimers = [];
 
   const accounts = store.accounts.filter((account) => account.enabled);
+  const nowDate = new Date();
+  const today = nowDate.toISOString().slice(0, 10);
+
   for (const account of accounts) {
     const [hour, minute] = String(account.schedule_time || config.defaultSchedule || '08:30').split(':').map(Number);
     if (!Number.isInteger(hour) || !Number.isInteger(minute)) continue;
@@ -526,6 +532,19 @@ function reloadSchedules() {
       checkinAccount(account.id).catch((err) => writeLog(account.id, 'checkin', err.message));
     });
     scheduledJobs.set(account.id, job);
+
+    // 追赶检查：如果今天的定时时间已过且该账号今天尚未签到，自动补签
+    const scheduleToday = new Date(nowDate.getFullYear(), nowDate.getMonth(), nowDate.getDate(), hour, minute, 0);
+    if (nowDate > scheduleToday) {
+      const lastCheckinDate = account.last_checkin_at ? new Date(account.last_checkin_at).toISOString().slice(0, 10) : null;
+      if (lastCheckinDate !== today) {
+        const timer = setTimeout(() => {
+          writeLog(account.id, 'schedule', `启动追赶：错过定时 ${account.schedule_time}，立即签到`);
+          checkinAccount(account.id).catch((err) => writeLog(account.id, 'checkin', err.message));
+        }, 5000);
+        catchUpTimers.push(timer);
+      }
+    }
   }
 }
 
